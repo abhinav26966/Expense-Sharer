@@ -35,21 +35,20 @@ Scenario: You attend a party with 2 friends and 1 cousin. You owe 50%, Friend 1 
 
 ## 🔧 Tech Stack
 
-- **Backend**: Node.js with Express.js (or the backend framework used)
-- **Database**: MongoDB / MySQL / PostgreSQL (depending on your project)
-- **Validation**: Joi / Express-Validator (or other validation libraries)
+- **Backend**: Python Flask
+- **Database**: SQLite
 
 ## 📋 API Endpoints
 
 ### User Endpoints:
-- `POST /user` - Create a new user
-- `GET /user/:id` - Retrieve user details by ID
+- `POST/user` - Create a new user
+- `GET/user/id` - Retrieve user details by ID
 
 ### Expense Endpoints:
-- `POST /expense` - Add a new expense
-- `GET /expense/user/:id` - Get individual user expenses
-- `GET /expense/overall` - Retrieve overall expenses
-- `GET /expense/download` - Download the balance sheet
+- `POST/expenses` - Add a new expense
+- `GET/expense/user/id` - Get individual user expenses
+- `GET/expenses` - Retrieve overall expenses
+- `GET/balance-sheet` - Download the balance sheet
 
 ## 💡 Getting Started
 
@@ -73,9 +72,15 @@ Scenario: You attend a party with 2 friends and 1 cousin. You owe 50%, Friend 1 
     pip install -r requirements.txt
     ```
 
-4. Make sure you're in the project root directory and your virtual environment is activated.
+4. Set up your environment variables in a `.env` file:
+    ```bash
+    SECRET_KEY=YOUR_SECRET_KEY
+    DATABASE_URL=YOUR_DATABASE_URL
+    ```
 
-5. Run the following command:
+5. Make sure you're in the project root directory and your virtual environment is activated.
+
+6. Run the following command:
     ```
     python run.py
     ```
