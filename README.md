@@ -103,6 +103,7 @@ http://127.0.0.1:5000/users/
 <img width="979" alt="Screenshot 2024-10-21 at 2 24 34 PM" src="https://github.com/user-attachments/assets/fa91b28b-8855-44e0-99af-72cba5e555c6">
 
 http://127.0.0.1:5000/users/2
+
 <img width="584" alt="Screenshot 2024-10-21 at 2 24 44 PM" src="https://github.com/user-attachments/assets/7153d23b-149b-471f-99cd-9927710484f1">
 
 http://127.0.0.1:5000/expenses
