@@ -94,6 +94,32 @@ Scenario: You attend a party with 2 friends and 1 cousin. You owe 50%, Friend 1 
 - Get all expenses: GET /expenses
 - Get balance sheet: GET /balance-sheet
 
+## Screenshots
+
+http://127.0.0.1:5000/
+<img width="975" alt="Screenshot 2024-10-21 at 2 24 19 PM" src="https://github.com/user-attachments/assets/d0f0d982-0688-41d8-9579-e22cf93ab2bd">
+
+http://127.0.0.1:5000/users/
+<img width="979" alt="Screenshot 2024-10-21 at 2 24 34 PM" src="https://github.com/user-attachments/assets/fa91b28b-8855-44e0-99af-72cba5e555c6">
+
+http://127.0.0.1:5000/users/2
+<img width="584" alt="Screenshot 2024-10-21 at 2 24 44 PM" src="https://github.com/user-attachments/assets/7153d23b-149b-471f-99cd-9927710484f1">
+
+http://127.0.0.1:5000/expenses
+<img width="814" alt="Screenshot 2024-10-21 at 2 25 36 PM" src="https://github.com/user-attachments/assets/ebf459e0-724c-4aa0-8b54-5b56451d54c5">
+
+http://127.0.0.1:5000/expenses
+<img width="804" alt="Screenshot 2024-10-21 at 2 26 09 PM" src="https://github.com/user-attachments/assets/d2c14505-6617-44af-9e33-c40645c0e5fe">
+
+http://127.0.0.1:5000/users/1/expenses
+<img width="989" alt="Screenshot 2024-10-21 at 2 26 48 PM" src="https://github.com/user-attachments/assets/933bc16d-6cb4-405f-aa4b-dcd50099658e">
+
+http://127.0.0.1:5000/expenses
+<img width="979" alt="Screenshot 2024-10-21 at 2 27 11 PM" src="https://github.com/user-attachments/assets/a60ea48b-4b3e-4b32-a03e-11513c316fc8">
+
+http://127.0.0.1:5000/balance-sheet
+<img width="914" alt="Screenshot 2024-10-21 at 2 27 29 PM" src="https://github.com/user-attachments/assets/b74573f6-94c2-4a87-ad9c-9b8c1c9834f9">
+
 🛠️ Future Enhancements
 -----------------------
 
