@@ -60,8 +60,8 @@ COPY --from=builder /opt/venv /opt/venv
 # Copy application code
 COPY --chown=appuser:appgroup . .
 
-# Create directory for SQLite database with proper permissions
-RUN mkdir -p /app/data && chown -R appuser:appgroup /app/data
+# Create directories for SQLite database and Flask instance with proper permissions
+RUN mkdir -p /app/data /app/instance && chown -R appuser:appgroup /app/data /app/instance
 
 # Switch to non-root user
 USER appuser
