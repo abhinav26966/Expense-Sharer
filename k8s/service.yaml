@@ -1,0 +1,22 @@
+# =============================================================================
+# Kubernetes Service
+# =============================================================================
+# Exposes the expense-sharer deployment within the cluster.
+# ClusterIP type provides internal load balancing across pods.
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: expense-sharer-service
+  namespace: expense-sharer
+  labels:
+    app: expense-sharer
+spec:
+  type: ClusterIP
+  selector:
+    app: expense-sharer
+  ports:
+    - name: http
+      port: 80
+      targetPort: 5000
+      protocol: TCP

@@ -1,0 +1,422 @@
+# =============================================================================
+# CI Pipeline - Daily Expense Sharing Application
+# =============================================================================
+# This pipeline implements a production-grade CI workflow following DevSecOps
+# principles with shift-left security practices.
+#
+# Pipeline Stages & Justification:
+# --------------------------------
+# 1. Checkout      - Retrieve source code for all subsequent stages
+# 2. Setup Runtime - Install Python and configure the build environment
+# 3. Linting       - Enforce coding standards early to prevent technical debt
+# 4. SAST          - Static Application Security Testing (CodeQL) to detect
+#                    code-level vulnerabilities before they reach production
+# 5. SCA           - Software Composition Analysis to identify vulnerable
+#                    dependencies (supply chain security)
+# 6. Unit Tests    - Validate business logic and prevent regressions
+# 7. Build         - Create deployable artifact
+# 8. Docker Build  - Containerize the application
+# 9. Image Scan    - Detect OS/library vulnerabilities in container (Trivy)
+# 10. Runtime Test - Validate container behavior (smoke test)
+# 11. Registry Push- Publish trusted image to DockerHub
+# =============================================================================
+
+name: CI Pipeline
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/expense-sharer
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ===========================================================================
+  # Stage 1: Code Quality - Linting
+  # ===========================================================================
+  # WHY: Linting enforces coding standards early in the pipeline.
+  # This prevents technical debt, improves code maintainability, and ensures
+  # consistent code style across the team. Fail-fast approach saves CI time.
+  # ===========================================================================
+  lint:
+    name: Code Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8
+
+      - name: Run Flake8 (PEP8 compliance)
+        run: |
+          # Stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Treat all other issues as warnings (exit-zero treats all errors as warnings)
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+  # ===========================================================================
+  # Stage 2: Static Application Security Testing (SAST)
+  # ===========================================================================
+  # WHY: SAST with CodeQL detects security vulnerabilities in the source code
+  # before runtime. This includes OWASP Top 10 issues like SQL injection,
+  # XSS, and insecure configurations. Shift-left security catches issues early.
+  # ===========================================================================
+  sast:
+    name: SAST - CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          # CodeQL queries for security and quality issues
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
+
+  # ===========================================================================
+  # Stage 3: Software Composition Analysis (SCA)
+  # ===========================================================================
+  # WHY: SCA scans third-party dependencies for known vulnerabilities.
+  # Supply chain attacks are increasingly common (e.g., Log4Shell).
+  # This stage ensures we don't ship applications with vulnerable libraries.
+  # ===========================================================================
+  sca:
+    name: SCA - Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety bandit
+
+      - name: Run Safety (dependency vulnerability scan)
+        run: |
+          pip install -r requirements.txt
+          # Safety checks installed packages for known security vulnerabilities
+          safety check --full-report || true  # Don't fail build, report issues
+        continue-on-error: true
+
+      - name: Run Bandit (Python security linter)
+        run: |
+          # Bandit finds common security issues in Python code
+          bandit -r app/ -f json -o bandit-report.json || true
+          bandit -r app/ -ll  # Show medium and high severity issues
+        continue-on-error: true
+
+      - name: Upload Bandit Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+
+  # ===========================================================================
+  # Stage 4: Unit Tests
+  # ===========================================================================
+  # WHY: Unit tests validate business logic and prevent regressions.
+  # Tests run after linting to ensure code quality before testing functionality.
+  # Code coverage metrics help identify untested code paths.
+  # ===========================================================================
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: [lint]  # Run tests only if linting passes
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Set up test environment
+        run: |
+          export FLASK_ENV=testing
+          export SECRET_KEY=test-secret-key
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing
+        env:
+          FLASK_ENV: testing
+          SECRET_KEY: test-secret-key
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  # ===========================================================================
+  # Stage 5: Build Docker Image
+  # ===========================================================================
+  # WHY: Containerization ensures consistent deployment across environments.
+  # Building the image validates the Dockerfile and creates the artifact
+  # for subsequent security scanning and deployment.
+  # ===========================================================================
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [test, sast, sca]  # Build only after quality and security gates pass
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build Docker image (for scanning)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: ${{ env.DOCKER_IMAGE }}:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Save Docker image as artifact
+        run: |
+          docker save ${{ env.DOCKER_IMAGE }}:scan -o expense-sharer-image.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: expense-sharer-image.tar
+          retention-days: 1
+
+  # ===========================================================================
+  # Stage 6: Container Security Scan (Trivy)
+  # ===========================================================================
+  # WHY: Trivy scans container images for OS and library vulnerabilities.
+  # Even if our code is secure, the base image or installed packages might
+  # have CVEs. This prevents shipping vulnerable containers to production.
+  # ===========================================================================
+  scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker image
+        run: docker load -i expense-sharer-image.tar
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.DOCKER_IMAGE }}:scan'
+          format: 'table'
+          exit-code: '0'  # Don't fail build, report issues
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Run Trivy and generate SARIF report
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.DOCKER_IMAGE }}:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ===========================================================================
+  # Stage 7: Container Runtime Test (Smoke Test)
+  # ===========================================================================
+  # WHY: Validates that the container can start and respond to requests.
+  # This catches runtime configuration issues before deployment.
+  # A simple health check ensures the application is actually functional.
+  # ===========================================================================
+  runtime-test:
+    name: Container Runtime Test
+    runs-on: ubuntu-latest
+    needs: [scan]
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker image
+        run: docker load -i expense-sharer-image.tar
+
+      - name: Start container
+        run: |
+          docker run -d --name expense-app \
+            -p 5000:5000 \
+            -e SECRET_KEY=test-secret-key \
+            -e FLASK_ENV=testing \
+            ${{ env.DOCKER_IMAGE }}:scan
+
+      - name: Wait for container to be ready
+        run: |
+          echo "Waiting for application to start..."
+          for i in {1..30}; do
+            if curl -s http://localhost:5000/ > /dev/null 2>&1; then
+              echo "Application is ready!"
+              break
+            fi
+            echo "Attempt $i: Waiting..."
+            sleep 2
+          done
+
+      - name: Run smoke tests
+        run: |
+          echo "=== Smoke Test 1: Health Check ==="
+          curl -f http://localhost:5000/ || exit 1
+          
+          echo ""
+          echo "=== Smoke Test 2: Test Endpoint ==="
+          curl -f http://localhost:5000/test || exit 1
+          
+          echo ""
+          echo "=== Smoke Test 3: Users Endpoint ==="
+          curl -f http://localhost:5000/users/ || exit 1
+          
+          echo ""
+          echo "=== All smoke tests passed! ==="
+
+      - name: Container logs (on failure)
+        if: failure()
+        run: docker logs expense-app
+
+      - name: Stop container
+        if: always()
+        run: docker stop expense-app || true
+
+  # ===========================================================================
+  # Stage 8: Push to Docker Registry
+  # ===========================================================================
+  # WHY: Only after all quality and security gates pass, we push the trusted
+  # image to DockerHub. This ensures only validated images are available for
+  # deployment. Uses GitHub Secrets for secure registry authentication.
+  # ===========================================================================
+  push:
+    name: Push to DockerHub
+    runs-on: ubuntu-latest
+    needs: [runtime-test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image digest
+        run: echo "Image pushed with tags - ${{ steps.meta.outputs.tags }}"

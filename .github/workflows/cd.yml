@@ -1,0 +1,370 @@
+# =============================================================================
+# CD Pipeline - Daily Expense Sharing Application
+# =============================================================================
+# This pipeline handles Continuous Deployment to a Kubernetes cluster.
+# Triggered after successful CI pipeline or manual deployment.
+#
+# Pipeline Stages:
+# 1. Deploy to Kubernetes - Apply manifests to cluster
+# 2. Verify Deployment - Ensure pods are running
+# 3. DAST (Dynamic Application Security Testing) - Test running application
+# 4. Rollback on Failure - Automatic rollback if deployment fails
+# =============================================================================
+
+name: CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+    branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to deploy'
+        required: false
+        default: 'latest'
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/expense-sharer
+  KUBE_NAMESPACE: expense-sharer
+
+jobs:
+  # ===========================================================================
+  # Stage 1: Deploy to Kubernetes
+  # ===========================================================================
+  # WHY: Automates the deployment process ensuring consistency and speed.
+  # Uses kubectl to apply manifests with proper image tags.
+  # Includes validation of Kubernetes manifests before deployment.
+  # ===========================================================================
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    environment: 
+      name: ${{ github.event.inputs.environment || 'staging' }}
+      url: http://expense-sharer.local
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: image-tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+        # Note: KUBE_CONFIG secret contains base64-encoded kubeconfig
+
+      - name: Validate Kubernetes manifests
+        run: |
+          echo "Validating Kubernetes manifests..."
+          kubectl apply --dry-run=client -f k8s/namespace.yaml
+          kubectl apply --dry-run=client -f k8s/configmap.yaml
+          kubectl apply --dry-run=client -f k8s/deployment.yaml
+          kubectl apply --dry-run=client -f k8s/service.yaml
+          echo "All manifests are valid!"
+
+      - name: Update deployment image
+        run: |
+          # Update the image tag in deployment manifest
+          sed -i "s|DOCKER_IMAGE_PLACEHOLDER:TAG_PLACEHOLDER|${{ env.DOCKER_IMAGE }}:${{ steps.image-tag.outputs.tag }}|g" k8s/deployment.yaml
+          cat k8s/deployment.yaml | grep -A5 "image:"
+
+      - name: Create namespace (if not exists)
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+        continue-on-error: true
+
+      - name: Deploy ConfigMap and Secrets
+        run: |
+          kubectl apply -f k8s/configmap.yaml
+          # Note: In production, create secret separately via secure method
+          # kubectl apply -f k8s/secret.yaml
+
+      - name: Create secret from GitHub Secret
+        run: |
+          kubectl create secret generic expense-sharer-secret \
+            --namespace=${{ env.KUBE_NAMESPACE }} \
+            --from-literal=SECRET_KEY=${{ secrets.APP_SECRET_KEY }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy application
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
+          kubectl apply -f k8s/ingress.yaml || true
+          kubectl apply -f k8s/hpa.yaml || true
+
+      - name: Record deployment for rollback
+        run: |
+          kubectl annotate deployment expense-sharer \
+            --namespace=${{ env.KUBE_NAMESPACE }} \
+            kubernetes.io/change-cause="Deploy ${{ steps.image-tag.outputs.tag }} via GitHub Actions" \
+            --overwrite
+
+  # ===========================================================================
+  # Stage 2: Verify Deployment
+  # ===========================================================================
+  # WHY: Ensures the deployment was successful before proceeding.
+  # Waits for pods to be ready and validates health endpoints.
+  # Provides early feedback if deployment issues occur.
+  # ===========================================================================
+  verify:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: [deploy]
+
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Wait for rollout
+        run: |
+          echo "Waiting for deployment rollout..."
+          kubectl rollout status deployment/expense-sharer \
+            --namespace=${{ env.KUBE_NAMESPACE }} \
+            --timeout=300s
+
+      - name: Verify pods are running
+        run: |
+          echo "=== Pod Status ==="
+          kubectl get pods -n ${{ env.KUBE_NAMESPACE }} -l app=expense-sharer
+          
+          echo ""
+          echo "=== Verifying pod readiness ==="
+          READY_PODS=$(kubectl get pods -n ${{ env.KUBE_NAMESPACE }} -l app=expense-sharer \
+            -o jsonpath='{.items[*].status.containerStatuses[*].ready}' | tr ' ' '\n' | grep -c true || echo 0)
+          
+          if [ "$READY_PODS" -lt 1 ]; then
+            echo "Error: No ready pods found!"
+            kubectl describe pods -n ${{ env.KUBE_NAMESPACE }} -l app=expense-sharer
+            exit 1
+          fi
+          
+          echo "Found $READY_PODS ready pod(s)"
+
+      - name: Test internal endpoint
+        run: |
+          # Port-forward to test the service
+          kubectl port-forward service/expense-sharer-service 8080:80 \
+            -n ${{ env.KUBE_NAMESPACE }} &
+          sleep 5
+          
+          echo "Testing health endpoint..."
+          curl -f http://localhost:8080/ || exit 1
+          echo "Health check passed!"
+          
+          # Kill port-forward
+          pkill -f "port-forward" || true
+
+  # ===========================================================================
+  # Stage 3: DAST - Dynamic Application Security Testing
+  # ===========================================================================
+  # WHY: DAST tests the running application for security vulnerabilities.
+  # Unlike SAST which analyzes code, DAST finds runtime security issues
+  # like authentication bypasses, injection vulnerabilities, and misconfigs.
+  # Uses OWASP ZAP for comprehensive web application security testing.
+  # ===========================================================================
+  dast:
+    name: DAST - Security Testing
+    runs-on: ubuntu-latest
+    needs: [verify]
+    continue-on-error: true  # DAST results are informational
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Set up port forwarding
+        run: |
+          kubectl port-forward service/expense-sharer-service 5000:80 \
+            -n ${{ env.KUBE_NAMESPACE }} &
+          sleep 10
+          
+          # Verify app is accessible
+          curl -f http://localhost:5000/ || exit 1
+          echo "Application is accessible for DAST"
+
+      - name: Run OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          target: 'http://localhost:5000/'
+          rules_file_name: '.zap/rules.tsv'
+          fail_action: false
+        continue-on-error: true
+
+      - name: Create ZAP rules file
+        run: |
+          mkdir -p .zap
+          cat > .zap/rules.tsv << 'EOF'
+          10010	IGNORE	(Cookie No HttpOnly Flag)
+          10011	IGNORE	(Cookie Without Secure Flag)
+          10015	IGNORE	(Incomplete or No Cache-control Header Set)
+          10021	IGNORE	(X-Content-Type-Options Header Missing)
+          10038	IGNORE	(Content Security Policy Header Not Set)
+          EOF
+
+      - name: Run basic DAST tests manually
+        run: |
+          echo "=== Running Basic DAST Tests ==="
+          
+          # Test 1: SQL Injection attempt
+          echo "Test 1: SQL Injection on user endpoint..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            "http://localhost:5000/users/1'%20OR%20'1'='1" || echo "000")
+          if [ "$RESPONSE" != "404" ] && [ "$RESPONSE" != "400" ]; then
+            echo "Warning: Potential SQL injection vulnerability"
+          else
+            echo "SQL Injection test: PASSED"
+          fi
+          
+          # Test 2: XSS attempt
+          echo "Test 2: XSS on user creation..."
+          curl -s -X POST http://localhost:5000/users/ \
+            -H "Content-Type: application/json" \
+            -d '{"email":"test@test.com","name":"<script>alert(1)</script>","mobile":"123"}' || true
+          echo "XSS test completed (check response handling)"
+          
+          # Test 3: Check security headers
+          echo "Test 3: Security headers check..."
+          HEADERS=$(curl -sI http://localhost:5000/)
+          echo "$HEADERS"
+          
+          # Test 4: Rate limiting check (basic)
+          echo "Test 4: Rate limiting check..."
+          for i in {1..20}; do
+            curl -s -o /dev/null http://localhost:5000/
+          done
+          echo "Rate limiting test completed"
+          
+          echo "=== DAST Tests Complete ==="
+
+      - name: Upload DAST results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dast-results
+          path: |
+            zap-report.html
+            zap-report.md
+        continue-on-error: true
+
+      - name: Stop port forwarding
+        if: always()
+        run: pkill -f "port-forward" || true
+
+  # ===========================================================================
+  # Stage 4: Rollback (on failure)
+  # ===========================================================================
+  # WHY: Provides automatic recovery if deployment verification fails.
+  # Kubernetes revision history allows quick rollback to last known good state.
+  # Minimizes downtime in case of bad deployments.
+  # ===========================================================================
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [verify]
+    if: failure()
+
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Rollback deployment
+        run: |
+          echo "Deployment verification failed. Initiating rollback..."
+          kubectl rollout undo deployment/expense-sharer \
+            --namespace=${{ env.KUBE_NAMESPACE }}
+          
+          echo "Waiting for rollback to complete..."
+          kubectl rollout status deployment/expense-sharer \
+            --namespace=${{ env.KUBE_NAMESPACE }} \
+            --timeout=300s
+          
+          echo "Rollback completed successfully"
+
+      - name: Notify rollback
+        run: |
+          echo "::warning::Deployment was rolled back due to verification failure"
+
+  # ===========================================================================
+  # Stage 5: Post-Deployment Summary
+  # ===========================================================================
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [dast]
+    if: always()
+
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Generate deployment summary
+        run: |
+          echo "# Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Cluster Status" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          kubectl get all -n ${{ env.KUBE_NAMESPACE }} >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Unable to fetch cluster status"
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Recent Events" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          kubectl get events -n ${{ env.KUBE_NAMESPACE }} --sort-by='.lastTimestamp' | tail -20 >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Unable to fetch events"
+          echo '```' >> $GITHUB_STEP_SUMMARY

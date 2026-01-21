@@ -1,0 +1,13 @@
+# =============================================================================
+# Kubernetes Namespace
+# =============================================================================
+# Creates an isolated namespace for the expense-sharer application.
+# Namespaces provide logical separation and resource isolation.
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: expense-sharer
+  labels:
+    app: expense-sharer
+    environment: production

@@ -1,0 +1,16 @@
+# =============================================================================
+# ConfigMap - Non-sensitive configuration
+# =============================================================================
+# Stores non-sensitive configuration data that can be consumed by pods.
+# ConfigMaps decouple configuration from container images.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: expense-sharer-config
+  namespace: expense-sharer
+  labels:
+    app: expense-sharer
+data:
+  FLASK_ENV: "production"
+  DATABASE_URL: "sqlite:///data/expenses.db"

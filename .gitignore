@@ -147,3 +147,14 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# Docker
+*.tar
+
+# Security scan reports
+bandit-report.json
+trivy-results.sarif
+zap-report.*
+
+# Data directory
+data/

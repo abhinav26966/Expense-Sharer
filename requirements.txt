@@ -1,3 +1,8 @@
+# =============================================================================
+# Daily Expense Sharing Application - Dependencies
+# =============================================================================
+
+# Core Flask dependencies
 blinker==1.8.2
 click==8.1.7
 Flask==3.0.3
@@ -8,3 +13,18 @@ MarkupSafe==3.0.2
 SQLAlchemy==2.0.36
 typing_extensions==4.12.2
 Werkzeug==3.0.4
+
+# Environment management
+python-dotenv==1.0.1
+
+# Production server
+gunicorn==21.2.0
+
+# Testing dependencies
+pytest==8.0.0
+pytest-cov==4.1.0
+
+# Code quality (for CI/CD)
+flake8==7.0.0
+bandit==1.7.7
+safety==3.0.1

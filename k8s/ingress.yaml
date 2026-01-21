@@ -1,0 +1,30 @@
+# =============================================================================
+# Kubernetes Ingress
+# =============================================================================
+# Exposes the application to external traffic via HTTP/HTTPS.
+# Requires an Ingress Controller (e.g., nginx-ingress) in the cluster.
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: expense-sharer-ingress
+  namespace: expense-sharer
+  labels:
+    app: expense-sharer
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Enable rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+spec:
+  rules:
+    - host: expense-sharer.local  # Update for your domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: expense-sharer-service
+                port:
+                  number: 80

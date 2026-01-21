@@ -1,133 +1,379 @@
-# 💸 Daily Expense Sharing App
+# Daily Expense Sharing Application
 
-Welcome to the **Daily Expense Sharing App**! This project simplifies the often tedious task of splitting expenses among friends, colleagues, or family. Whether it's a weekend getaway, dinner with friends, or shared utilities—this app has got you covered. Split expenses with precision and fairness through multiple methods, and manage all your transactions effortlessly.
+[![CI Pipeline](https://github.com/abhinavnagar2696/Expense-Sharer/actions/workflows/ci.yml/badge.svg)](https://github.com/abhinavnagar2696/Expense-Sharer/actions/workflows/ci.yml)
+[![CD Pipeline](https://github.com/abhinavnagar2696/Expense-Sharer/actions/workflows/cd.yml/badge.svg)](https://github.com/abhinavnagar2696/Expense-Sharer/actions/workflows/cd.yml)
 
-## 🚀 Features
+A production-ready expense sharing application built with Flask, featuring a complete CI/CD pipeline implementing DevSecOps best practices.
 
-- **User Management**
-  - Add users with their email, name, and mobile number.
-  
-- **Expense Management**
-  - Record and track expenses added by users.
-  - Split expenses in three convenient ways:
-    1. **Equal Split**: Divide the amount equally among participants.
-    2. **Exact Split**: Specify exact amounts for each participant.
-    3. **Percentage Split**: Allocate expenses based on predefined percentages (must sum up to 100%).
+## Table of Contents
 
-- **Balance Sheet**
-  - Get a detailed breakdown of individual and group expenses.
-  - Generate and download balance sheets for easy tracking.
+- [Overview](#overview)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [CI/CD Pipeline](#cicd-pipeline)
+- [Getting Started](#getting-started)
+- [API Documentation](#api-documentation)
+- [Security](#security)
+- [Deployment](#deployment)
+- [Project Structure](#project-structure)
 
-- **Data Validation**
-  - Smart validation of user inputs to ensure consistency.
-  - Auto-checks percentage-based splits to guarantee they sum up to 100%.
+---
 
-## 📊 Expense Calculation Examples
+## Overview
 
-### Equal Split
-Scenario: You go out with 3 friends, and the total bill is 3000. Each friend owes 1000.
+The Daily Expense Sharing App simplifies splitting expenses among friends, colleagues, or family. Whether it's a weekend getaway, dinner with friends, or shared utilities—this app handles fair expense distribution through multiple splitting methods.
 
-### Exact Split
-Scenario: You shop with 2 friends and pay 4299. Friend 1 owes 799, Friend 2 owes 2000, and you owe 1500.
+## Features
 
-### Percentage Split
-Scenario: You attend a party with 2 friends and 1 cousin. You owe 50%, Friend 1 owes 25%, and Friend 2 owes 25%.
+### Application Features
+- **User Management** - Create and manage users with email, name, and mobile number
+- **Expense Tracking** - Record and track expenses with detailed descriptions
+- **Multiple Split Methods**:
+  - **Equal Split**: Divide amount equally among participants
+  - **Exact Split**: Specify exact amounts for each participant
+  - **Percentage Split**: Allocate based on percentages (must sum to 100%)
+- **Balance Sheet** - Generate detailed breakdown of individual and group expenses
+- **Data Validation** - Smart validation ensuring consistency
 
-## 🔧 Tech Stack
+### DevOps Features
+- Automated CI/CD pipeline with GitHub Actions
+- Container security scanning (Trivy)
+- Static Application Security Testing (CodeQL)
+- Software Composition Analysis (Safety, Bandit)
+- Kubernetes deployment with auto-scaling
+- Dynamic Application Security Testing (OWASP ZAP)
 
-- **Backend**: Python Flask
-- **Database**: SQLite
+---
 
-## 📋 API Endpoints
+## Tech Stack
 
-### User Endpoints:
-- `POST/user` - Create a new user
-- `GET/user/id` - Retrieve user details by ID
+| Component | Technology |
+|-----------|------------|
+| Backend | Python 3.11, Flask 3.0 |
+| Database | SQLite (SQLAlchemy ORM) |
+| Web Server | Gunicorn |
+| Containerization | Docker |
+| Orchestration | Kubernetes |
+| CI/CD | GitHub Actions |
+| Security Scanning | CodeQL, Trivy, Bandit, Safety |
 
-### Expense Endpoints:
-- `POST/expenses` - Add a new expense
-- `GET/expense/user/id` - Get individual user expenses
-- `GET/expenses` - Retrieve overall expenses
-- `GET/balance-sheet` - Download the balance sheet
+---
 
-## 💡 Getting Started
+## CI/CD Pipeline
+
+### Pipeline Architecture
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   COMMIT    │────▶│  CI PIPELINE │────▶│ CD PIPELINE │
+└─────────────┘     └─────────────┘     └─────────────┘
+                           │                    │
+                    ┌──────┴──────┐      ┌──────┴──────┐
+                    ▼             ▼      ▼             ▼
+               ┌────────┐   ┌────────┐ ┌────────┐ ┌────────┐
+               │  Lint  │   │  SAST  │ │ Deploy │ │  DAST  │
+               └────────┘   └────────┘ └────────┘ └────────┘
+                    │             │          │          │
+               ┌────────┐   ┌────────┐ ┌────────┐ ┌────────┐
+               │  Test  │   │  SCA   │ │ Verify │ │Rollback│
+               └────────┘   └────────┘ └────────┘ └────────┘
+                    │             │
+               ┌────────┐   ┌────────┐
+               │ Build  │   │  Scan  │
+               └────────┘   └────────┘
+                    │             │
+               ┌────────┐   ┌────────┐
+               │Runtime │   │  Push  │
+               │  Test  │   │        │
+               └────────┘   └────────┘
+```
+
+### CI Pipeline Stages
+
+| Stage | Tool | Purpose | Why It Matters |
+|-------|------|---------|----------------|
+| **Linting** | Flake8 | Code style enforcement | Prevents technical debt, ensures maintainability |
+| **SAST** | CodeQL | Static security analysis | Detects OWASP Top 10 vulnerabilities in code |
+| **SCA** | Safety, Bandit | Dependency scanning | Identifies supply chain risks |
+| **Unit Tests** | Pytest | Functionality validation | Prevents regressions, validates business logic |
+| **Docker Build** | Docker | Containerization | Consistent deployment artifact |
+| **Image Scan** | Trivy | Container vulnerability scan | Prevents vulnerable images from shipping |
+| **Runtime Test** | Smoke tests | Container validation | Ensures image is runnable |
+| **Registry Push** | DockerHub | Image publishing | Enables downstream deployment |
+
+### CD Pipeline Stages
+
+| Stage | Purpose | Why It Matters |
+|-------|---------|----------------|
+| **Deploy** | Apply K8s manifests | Automated, consistent deployments |
+| **Verify** | Validate deployment | Early detection of deployment issues |
+| **DAST** | Runtime security testing | Finds vulnerabilities in running app |
+| **Rollback** | Recovery mechanism | Minimizes downtime on failures |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11+
+- Docker
+- Git
 
 ### Running Locally
------------------------
 
-1. Clone the repository:
-    ```bash
-    git clone https://github.com/your-username/daily-expense-sharing-app.git
-    cd daily-expense-sharing-app
-    ```
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/abhinavnagar2696/Expense-Sharer.git
+   cd Expense-Sharer
+   ```
 
-2. Set up a virtual environment:
-    ```bash
-    python -m venv venv
-    source venv/bin/activate
-    ```
+2. **Set up virtual environment**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-3. Install the required packages:
-    ```bash
-    pip install -r requirements.txt
-    ```
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-4. Set up your environment variables in a `.env` file:
-    ```bash
-    SECRET_KEY=YOUR_SECRET_KEY
-    DATABASE_URL=YOUR_DATABASE_URL
-    ```
+4. **Configure environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
 
-5. Make sure you're in the project root directory and your virtual environment is activated.
+5. **Run the application**
+   ```bash
+   python run.py
+   ```
 
-6. Run the following command:
-    ```
-    python run.py
-    ```
+6. **Access the app**
+   ```
+   http://localhost:5000
+   ```
 
-### You can use tools like cURL or Postman to test the API endpoints:
+### Running with Docker
 
-- Create a user: POST /users
-- Get user details: GET /users/<user_id>
-- Add an expense: POST /expenses
-- Get user expenses: GET /users/<user_id>/expenses
-- Get all expenses: GET /expenses
-- Get balance sheet: GET /balance-sheet
+```bash
+# Build the image
+docker build -t expense-sharer .
 
-## Screenshots
+# Run the container
+docker run -d -p 5000:5000 \
+  -e SECRET_KEY=your-secret-key \
+  -e FLASK_ENV=production \
+  expense-sharer
+```
 
-http://127.0.0.1:5000/
-<img width="975" alt="Screenshot 2024-10-21 at 2 24 19 PM" src="https://github.com/user-attachments/assets/d0f0d982-0688-41d8-9579-e22cf93ab2bd">
+### Running Tests
 
-http://127.0.0.1:5000/users/
-<img width="979" alt="Screenshot 2024-10-21 at 2 24 34 PM" src="https://github.com/user-attachments/assets/fa91b28b-8855-44e0-99af-72cba5e555c6">
+```bash
+# Run all tests with coverage
+pytest tests/ -v --cov=app --cov-report=term-missing
 
-http://127.0.0.1:5000/users/2
+# Run specific test file
+pytest tests/test_app.py -v
+```
 
-<img width="584" alt="Screenshot 2024-10-21 at 2 24 44 PM" src="https://github.com/user-attachments/assets/7153d23b-149b-471f-99cd-9927710484f1">
+---
 
-http://127.0.0.1:5000/expenses
-<img width="814" alt="Screenshot 2024-10-21 at 2 25 36 PM" src="https://github.com/user-attachments/assets/ebf459e0-724c-4aa0-8b54-5b56451d54c5">
+## API Documentation
 
-http://127.0.0.1:5000/expenses
-<img width="804" alt="Screenshot 2024-10-21 at 2 26 09 PM" src="https://github.com/user-attachments/assets/d2c14505-6617-44af-9e33-c40645c0e5fe">
+### User Endpoints
 
-http://127.0.0.1:5000/users/1/expenses
-<img width="989" alt="Screenshot 2024-10-21 at 2 26 48 PM" src="https://github.com/user-attachments/assets/933bc16d-6cb4-405f-aa4b-dcd50099658e">
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/users/` | Create a new user |
+| GET | `/users/<id>` | Get user by ID |
+| GET | `/users/` | List all users |
+| GET | `/users/<id>/expenses` | Get user's expenses |
 
-http://127.0.0.1:5000/expenses
-<img width="979" alt="Screenshot 2024-10-21 at 2 27 11 PM" src="https://github.com/user-attachments/assets/a60ea48b-4b3e-4b32-a03e-11513c316fc8">
+### Expense Endpoints
 
-http://127.0.0.1:5000/balance-sheet
-<img width="914" alt="Screenshot 2024-10-21 at 2 27 29 PM" src="https://github.com/user-attachments/assets/b74573f6-94c2-4a87-ad9c-9b8c1c9834f9">
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/expenses` | Create new expense |
+| GET | `/expenses` | List all expenses |
+| GET | `/balance-sheet` | Get balance sheet |
 
-🛠️ Future Enhancements
------------------------
+### Example Requests
 
-*   **User Authentication & Authorization**: Secure your app with login systems and permission-based access.
-    
-*   **Error Handling & Input Validation**: Robust error responses and comprehensive validation for even better user experience.
-    
-*   **Performance Optimization**: Optimize for large datasets and faster query times.
-    
-*   **Testing**: Add unit and integration tests to ensure code reliability.
+**Create User**
+```bash
+curl -X POST http://localhost:5000/users/ \
+  -H "Content-Type: application/json" \
+  -d '{"email": "john@example.com", "name": "John Doe", "mobile": "1234567890"}'
+```
+
+**Add Expense (Equal Split)**
+```bash
+curl -X POST http://localhost:5000/expenses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payer_id": 1,
+    "amount": 300,
+    "description": "Dinner",
+    "split_method": "equal",
+    "participants": [1, 2, 3]
+  }'
+```
+
+---
+
+## Security
+
+### Security Measures Implemented
+
+1. **Static Analysis (SAST)**
+   - CodeQL for security vulnerability detection
+   - Bandit for Python-specific security issues
+
+2. **Dependency Scanning (SCA)**
+   - Safety for known vulnerability detection
+   - Automated on every PR/push
+
+3. **Container Security**
+   - Trivy vulnerability scanner
+   - Non-root container execution
+   - Minimal base image (Python slim)
+
+4. **Runtime Security (DAST)**
+   - OWASP ZAP baseline scanning
+   - Custom security tests
+
+5. **Infrastructure Security**
+   - Kubernetes RBAC
+   - Network policies
+   - Secret management via GitHub Secrets
+
+### Secrets Configuration
+
+Configure the following GitHub Secrets for the pipeline:
+
+| Secret Name | Purpose |
+|-------------|---------|
+| `DOCKERHUB_USERNAME` | DockerHub registry username |
+| `DOCKERHUB_TOKEN` | DockerHub access token |
+| `KUBE_CONFIG` | Base64-encoded kubeconfig |
+| `APP_SECRET_KEY` | Application secret key |
+
+**How to set secrets:**
+```bash
+# Encode kubeconfig
+cat ~/.kube/config | base64 | pbcopy  # macOS
+cat ~/.kube/config | base64 -w 0      # Linux
+
+# Then paste in GitHub: Settings > Secrets and variables > Actions
+```
+
+---
+
+## Deployment
+
+### Kubernetes Deployment
+
+```bash
+# Apply all manifests
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/secret.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+kubectl apply -f k8s/ingress.yaml
+kubectl apply -f k8s/hpa.yaml
+
+# Check status
+kubectl get all -n expense-sharer
+```
+
+### Local Kubernetes (Minikube/Kind)
+
+```bash
+# Start cluster
+minikube start
+
+# Enable ingress
+minikube addons enable ingress
+
+# Build image in minikube
+eval $(minikube docker-env)
+docker build -t expense-sharer:latest .
+
+# Deploy
+kubectl apply -f k8s/
+```
+
+---
+
+## Project Structure
+
+```
+expense-sharer/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml           # CI pipeline
+│       └── cd.yml           # CD pipeline
+├── app/
+│   ├── __init__.py          # Application factory
+│   ├── models.py            # Database models
+│   ├── routes.py            # API endpoints
+│   └── utils.py             # Utility functions
+├── k8s/
+│   ├── namespace.yaml       # Kubernetes namespace
+│   ├── configmap.yaml       # Configuration
+│   ├── secret.yaml          # Secrets (example)
+│   ├── deployment.yaml      # Deployment spec
+│   ├── service.yaml         # Service definition
+│   ├── ingress.yaml         # Ingress rules
+│   └── hpa.yaml             # Horizontal Pod Autoscaler
+├── tests/
+│   ├── __init__.py
+│   └── test_app.py          # Unit tests
+├── .env.example             # Environment template
+├── config.py                # Configuration classes
+├── Dockerfile               # Container definition
+├── requirements.txt         # Python dependencies
+├── run.py                   # Application entry point
+└── README.md                # This file
+```
+
+---
+
+## Expense Calculation Examples
+
+### Equal Split
+- **Scenario**: Dinner with 3 friends, total bill ₹3000
+- **Result**: Each person owes ₹1000
+
+### Exact Split
+- **Scenario**: Shopping with 2 friends, total ₹4299
+- **Result**: Friend 1 owes ₹799, Friend 2 owes ₹2000, You owe ₹1500
+
+### Percentage Split
+- **Scenario**: Party expenses ₹10,000
+- **Result**: You (50%) = ₹5000, Friend 1 (30%) = ₹3000, Friend 2 (20%) = ₹2000
+
+---
+
+## Future Enhancements
+
+- [ ] User Authentication & Authorization
+- [ ] Enhanced Error Handling
+- [ ] Performance Optimization for large datasets
+- [ ] Integration Tests
+- [ ] Prometheus metrics endpoint
+- [ ] Helm chart for Kubernetes deployment
+
+---
+
+## License
+
+This project is part of the Scaler DevOps Assessment.
+
+## Author
+
+**Abhinav Nagar**  
+Scaler Student ID: [Your Student ID]

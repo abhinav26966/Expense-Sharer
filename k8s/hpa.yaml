@@ -1,0 +1,31 @@
+# =============================================================================
+# Horizontal Pod Autoscaler
+# =============================================================================
+# Automatically scales the number of pods based on CPU utilization.
+# Ensures application can handle varying load levels.
+# =============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: expense-sharer-hpa
+  namespace: expense-sharer
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: expense-sharer
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
